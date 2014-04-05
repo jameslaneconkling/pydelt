@@ -9,6 +9,7 @@ import datetime
 # third party modules
 import gexf
 from dateutil.relativedelta import relativedelta
+from dateutil import rrule
 
 
 GDELT = {
@@ -72,6 +73,67 @@ GDELT = {
          DATEADDED int
     )""",
 
+    'gdeltSchemaDaily': """(
+         GLOBALEVENTID bigint ,
+         SQLDATE date ,
+         MonthYear varchar(6) ,
+         Year varchar(4) ,
+         FractionDate real ,
+         Actor1Code varchar(20) , --char(3)
+         Actor1Name varchar(255) ,
+         Actor1CountryCode varchar(3) ,
+         Actor1KnownGroupCode varchar(3) ,
+         Actor1EthnicCode varchar(3) ,
+         Actor1Religion1Code varchar(3) ,
+         Actor1Religion2Code varchar(3) ,
+         Actor1Type1Code varchar(3) ,
+         Actor1Type2Code varchar(3) ,
+         Actor1Type3Code varchar(3) ,
+         Actor2Code varchar(20) , --char(3)
+         Actor2Name varchar(255) ,
+         Actor2CountryCode varchar(3) ,
+         Actor2KnownGroupCode varchar(3) ,
+         Actor2EthnicCode varchar(3) ,
+         Actor2Religion1Code varchar(3) ,
+         Actor2Religion2Code varchar(3) ,
+         Actor2Type1Code varchar(3) ,
+         Actor2Type2Code varchar(3) ,
+         Actor2Type3Code varchar(3) ,
+         IsRootEvent int ,
+         EventCode varchar(4) ,
+         EventBaseCode varchar(4) ,
+         EventRootCode varchar(4) ,
+         QuadClass int ,
+         GoldsteinScale real ,
+         NumMentions int ,
+         NumSources int ,
+         NumArticles int ,
+         AvgTone real ,
+         Actor1Geo_Type varchar(20) , --int
+         Actor1Geo_FullName varchar(255) ,
+         Actor1Geo_CountryCode varchar(2) ,
+         Actor1Geo_ADM1Code varchar(4) ,
+         Actor1Geo_Lat float ,
+         Actor1Geo_Long float ,
+         Actor1Geo_FeatureID varchar(20) , --int
+         Actor2Geo_Type varchar(20) , --int
+         Actor2Geo_FullName varchar(255) ,
+         Actor2Geo_CountryCode varchar(2) ,
+         Actor2Geo_ADM1Code varchar(4) ,
+         Actor2Geo_Lat float ,
+         Actor2Geo_Long float ,
+         Actor2Geo_FeatureID varchar(20) , --int
+         ActionGeo_Type varchar(20) , --int
+         ActionGeo_FullName varchar(255) ,
+         ActionGeo_CountryCode varchar(2) ,
+         ActionGeo_ADM1Code varchar(4) ,
+         ActionGeo_Lat float ,
+         ActionGeo_Long float ,
+         ActionGeo_FeatureID varchar(20) , --int
+         DATEADDED int ,
+         SOURCEURL varchar(255)
+    )""",
+
     'timelineSchema': """(
         sqldate date,
         count int,
@@ -110,6 +172,17 @@ GDELT = {
     'greatlakesQuery': """
         SELECT * FROM gdelt_temp
         WHERE ActionGeo_CountryCode IN ('BY', 'CG', 'KE', 'RW', 'TZ', 'UG')
+    """,
+
+    'syriaQuery': """
+        SELECT * FROM gdelt_temp
+        WHERE ActionGeo_CountryCode = 'SY'
+    """,
+
+    # Syria, Lebanon, Jordan, Turkey, Iraq, Egypt, Tunisia, Lybia, Algeria, Morocco, Saudi Arabia, Kuwait, Oman, Yemen
+    'middleEastQuery': """
+        SELECT * FROM gdelt_temp
+        WHERE ActionGeo_CountryCode IN ('SY', 'LE', 'JO', 'TU', 'IZ', EG', 'TS', 'LY', 'AG', 'MO', SA', 'KU', 'MU', 'YM')
     """,
 
     'drcConflictGeoPrecision': """
@@ -154,6 +227,43 @@ GDELT = {
         stddev(avgtone) AS tone_dev
         FROM gdelt_temp
         GROUP BY sqldate ORDER BY sqldate;
+    """,
+
+    'timelineQuery_fromExistingTable': """
+        SELECT date_trunc('%(timespan)s', sqldate) as %(timespan)s,
+        count(*) AS count,
+        count(CASE WHEN quadclass IN ('3', '4') AND actiongeo_type IN ('3', '4') THEN 1 ELSE NULL END) AS geo_conflict_count,
+        count(CASE WHEN quadclass = '1' THEN 1 ELSE NULL END) AS vcoop_count,
+        count(CASE WHEN quadclass = '2' THEN 1 ELSE NULL END) AS mcoop_count,
+        count(CASE WHEN quadclass = '3' THEN 1 ELSE NULL END) AS vconf_count,
+        count(CASE WHEN quadclass = '4' THEN 1 ELSE NULL END) AS mconf_count,
+        avg(goldsteinscale) AS goldstein_avg,
+        stddev(goldsteinscale) AS goldstein_dev,
+        count(CASE WHEN goldsteinscale = 10.0 THEN 1 ELSE NULL END) AS gs_10,
+        count(CASE WHEN goldsteinscale < 10.0 AND goldsteinscale >= 9.0 THEN 1 ELSE NULL END) AS gs_9,
+        count(CASE WHEN goldsteinscale < 9.0 AND goldsteinscale >= 8.0 THEN 1 ELSE NULL END) AS gs_8,
+        count(CASE WHEN goldsteinscale < 8.0 AND goldsteinscale >= 7.0 THEN 1 ELSE NULL END) AS gs_7,
+        count(CASE WHEN goldsteinscale < 7.0 AND goldsteinscale >= 6.0 THEN 1 ELSE NULL END) AS gs_6,
+        count(CASE WHEN goldsteinscale < 6.0 AND goldsteinscale >= 5.0 THEN 1 ELSE NULL END) AS gs_5,
+        count(CASE WHEN goldsteinscale < 5.0 AND goldsteinscale >= 4.0 THEN 1 ELSE NULL END) AS gs_4,
+        count(CASE WHEN goldsteinscale < 4.0 AND goldsteinscale >= 3.0 THEN 1 ELSE NULL END) AS gs_3,
+        count(CASE WHEN goldsteinscale < 3.0 AND goldsteinscale >= 2.0 THEN 1 ELSE NULL END) AS gs_2,
+        count(CASE WHEN goldsteinscale < 2.0 AND goldsteinscale >= 1.0 THEN 1 ELSE NULL END) AS gs_1,
+        count(CASE WHEN goldsteinscale < 1.0 AND goldsteinscale >= -1.0 THEN 1 ELSE NULL END) AS gs_0,
+        count(CASE WHEN goldsteinscale < -1.0 AND goldsteinscale >= -2.0 THEN 1 ELSE NULL END) AS gs_n1,
+        count(CASE WHEN goldsteinscale < -2.0 AND goldsteinscale >= -3.0 THEN 1 ELSE NULL END) AS gs_n2,
+        count(CASE WHEN goldsteinscale < -3.0 AND goldsteinscale >= -4.0 THEN 1 ELSE NULL END) AS gs_n3,
+        count(CASE WHEN goldsteinscale < -4.0 AND goldsteinscale >= -5.0 THEN 1 ELSE NULL END) AS gs_n4,
+        count(CASE WHEN goldsteinscale < -5.0 AND goldsteinscale >= -6.0 THEN 1 ELSE NULL END) AS gs_n5,
+        count(CASE WHEN goldsteinscale < -6.0 AND goldsteinscale >= -7.0 THEN 1 ELSE NULL END) AS gs_n6,
+        count(CASE WHEN goldsteinscale < -7.0 AND goldsteinscale >= -8.0 THEN 1 ELSE NULL END) AS gs_n7,
+        count(CASE WHEN goldsteinscale < -8.0 AND goldsteinscale >= -9.0 THEN 1 ELSE NULL END) AS gs_n8,
+        count(CASE WHEN goldsteinscale < -9.0 AND goldsteinscale >= -10.0 THEN 1 ELSE NULL END) AS gs_n9,
+        count(CASE WHEN goldsteinscale = -10.0 THEN 1 ELSE NULL END) AS gs_n10,
+        avg(avgtone) AS tone_avg,
+        stddev(avgtone) AS tone_dev
+        FROM %(table)s
+        GROUP BY %(timespan)s ORDER BY %(timespan)s;
     """
 }
 
@@ -166,8 +276,6 @@ def gdelt_datelist(startdate, enddate):
         sys.exit("Start date and end date must be of type datetime.date")
     if startdate > enddate:
         sys.exit("Start date cannot be greater than end date")
-    if startdate == enddate:
-        sys.exit("Start date and end date cannot be equal")
     if startdate < datetime.date(1979, 1, 1):
         sys.exit("Start date cannot be earlier than 1979-01-01")
     if enddate > datetime.date.today():
@@ -187,11 +295,11 @@ def gdelt_datelist(startdate, enddate):
             date = str(date.year)
             dates.append(date)
 
-    if startdate < datetime.date(2013, 1, 1) or enddate >= datetime.date(2006, 1, 1):
+    if startdate < datetime.date(2013, 4, 1) or enddate >= datetime.date(2006, 1, 1):
         # round startdate down to nearest month (that is above 2006-01-01)
         # and enddate down to the nearest month (that is below 2013-12-01)
-        sdate = max(startdate.replace(day = 1), datetime.date(2006, 01, 01))
-        edate = min(enddate.replace(day = 1), datetime.date(2012, 12, 1))
+        sdate = max(startdate.replace(day = 1), datetime.date(2006, 1, 1))
+        edate = min(enddate.replace(day = 1), datetime.date(2013, 3, 1))
 
         # calculate number of months to enddate
         month_delta = relativedelta(edate, sdate).years * 12 + relativedelta(edate, sdate).months + 1
@@ -200,9 +308,9 @@ def gdelt_datelist(startdate, enddate):
             date = str(date.year) + '{0:02d}'.format(date.month)
             dates.append(date)
 
-    if enddate >= datetime.date(2013, 1, 1):
+    if enddate >= datetime.date(2013, 4, 1):
         # no rounding, but ensure startdate is >= 2013-12-01
-        sdate = max(startdate, datetime.date(2013, 1, 1))
+        sdate = max(startdate, datetime.date(2013, 4, 1))
 
         # calculate number of days to enddate
         day_delta = (enddate - sdate).days + 1
@@ -211,101 +319,8 @@ def gdelt_datelist(startdate, enddate):
             date = str(date.year) + '{0:02d}'.format(date.month) + '{0:02d}'.format(date.day)
             dates.append(date)
 
+    # IMPROVEMENT: return date objects rather than strings, and leave the conversion to another function?
     return dates
-
-
-def batch_download(
-        startdate, enddate, importpath='/Users/jamesconkling/Documents/Projects/gdelt/export/'):
-    url = 'http://gdelt.utdallas.edu/data/backfiles/'
-    dates = gdelt_datelist(startdate, enddate)
-
-    # download gdelt zip file for every month in dates
-    t1 = datetime.datetime.now()
-
-    for date in dates:
-        print "retrieving gdelt file date", date
-        # gdeltZip = urllib2.urlopen(url + date + '.zip')
-        # localFile = open(importpath + date, 'w')
-        # localFile.write(gdeltZip.read())
-        # localFile.close()
-
-    dt = datetime.datetime.now() - t1
-    print "FINISHED DOWNLOADING FILES.  Total time elapsed: %s minutes" %(dt.seconds / 60)
-
-
-def batch_import(
-        table, startdate, enddate, query, database='gdelt',
-        user='jamesconkling', table_schema=GDELT['gdeltSchema'],
-        gdeltPath='/Users/jamesconkling/Documents/Projects/gdelt/export/'):
-    # batch import query to postgres from a directory of gdelt files
-    # must initialize the table first w/ the same schema and name as defined below
-
-    def unzip(source_filename, dest_dir):
-        with zipfile.ZipFile(source_filename) as zf:
-            for member in zf.infolist():
-                # Path traversal defense copied from
-                # http://hg.python.org/cpython/file/tip/Lib/http/server.py#l789
-                words = member.filename.split('/')
-                path = dest_dir
-                for word in words[:-1]:
-                    drive, word = os.path.splitdrive(word)
-                    head, word = os.path.split(word)
-                    if word in (os.curdir, os.pardir, ''): continue
-                    path = os.path.join(path, word)
-                zf.extract(member, path)
-
-    t1 = datetime.datetime.now()
-    dates = gdelt_datelist(startdate, enddate)
-    files_length = len(dates)
-    file_num = 1
-
-    for date in dates:
-        # print "\t unzipping gdelt %s (%s / %s)" %(date, file_num, files_length)
-        # unzip(gdeltPath + date + '.zip', gdeltPath)
-
-
-        #load csv into database via psycopg2; see http://zetcode.com/db/postgresqlpythontutorial/
-        connection = None
-
-        try:
-            print "\t connecting to postgres"
-            connection = psycopg2.connect(database = database, user = user)
-            cursor = connection.cursor()
-
-            print "\t\t copying %s.csv into gdelt_temp" %date
-            cursor.execute("CREATE TABLE gdelt_temp" + table_schema)
-            cursor.execute("COPY gdelt_temp FROM '" + gdeltPath + date + ".csv'")
-
-            print "\t\t inserting into %s query %s" %(table, query)
-            cursor.execute("INSERT INTO " + table + " " + query)
-            cursor.execute("DROP TABLE gdelt_temp")
-
-            connection.commit()
-            print "\t\t commit successful - inserted %s into %s" %(date, table)
-            file_num = file_num + 1
-
-        except psycopg2.DatabaseError, e:
-            if connection:
-                connection.rollback()
-
-            print '\t\t commit failed - error %s \n' % e
-            # os.remove(localPath + date + '.csv')
-            sys.exit(1)
-
-        finally:
-            if connection:
-                connection.close()
-                print "\t connection closed \n"
-
-
-        #delete .csv file in directory
-        #os.remove(localPath + date + '.csv')
-        #delete .zip file in directory
-        #os.remove(localPath + date + '.zip')
-
-    dt = datetime.datetime.now() - t1
-    print "FINISHED LOADING FILES INTO POSTGRES.  Total time elapsed: %s minutes" %(dt.seconds / 60)
-
 
 def init_table(table, table_schema, database='gdelt', user='jamesconkling'):
 
@@ -332,12 +347,170 @@ def init_table(table, table_schema, database='gdelt', user='jamesconkling'):
             connection.close()
             print 'connection closed'
 
+def batch_download(
+        startdate, enddate, importpath='/Users/jamesconkling/Documents/Projects/gdelt/export/tmp'):
+    url = 'http://data.gdeltproject.org/events/'
+    dates = gdelt_datelist(startdate, enddate)
+
+    # download gdelt zip file for every month in dates
+    t1 = datetime.datetime.now()
+
+    for date in dates:
+        if int(date) > 201304:
+            gdelt_file = date + ".export.CSV"
+        else:
+            gdelt_file = date
+
+        print "retrieving gdelt file date", date
+        try:
+            gdeltZip = urllib2.urlopen(url + gdelt_file + '.zip')
+        except urllib2.HTTPError, e:
+            print "\t\t******** ERROR downloading file ", date, " : ", e, " ********"
+            continue
+
+        localFile = open(importpath + date + '.zip', 'w')
+        localFile.write(gdeltZip.read())
+        localFile.close()
+        print url + gdelt_file + '.zip'
+
+    dt = datetime.datetime.now() - t1
+    print "FINISHED DOWNLOADING FILES.  Total time elapsed: %s minutes" %(dt.seconds / 60)
+
+def insert_query(
+            insert_from, insert_into, query,
+            database='gdelt', user='jamesconkling'):
+    # Insert into an existing table
+    # EX insert_query('timelineTable', 'eventTable',
+    #   query=GDELT['timelineQuery_fromExistingTable'] %('table': 'eventTable', 'timespan': 'WEEK'))
+    connection = None
+    try:
+        connection = psycopg2.connect(database = database, user = user)
+        cursor = connection.cursor()
+
+        print "insert from %s into %s query: %s " %(insert_from, insert_into, query)
+        cursor.execute("INSERT INTO %s %s" %(insert_into, query))
+
+        connection.commit()
+        print "COMMIT SUCCESSFUL - INSERTED FROM %s INTO %s \n"
+
+    except psycopg2.DatabaseError, e:
+        if connection:
+            connection.rollback()
+
+        print 'commit failed - Error %s' % e + "\n"
+        sys.exit(1)
+
+    finally:
+        if connection:
+            connection.close()
+            print 'connection closed'
+
+
+def batch_import(
+        table, startdate, enddate, query, database='gdelt',
+        user='jamesconkling', table_schema=GDELT['gdeltSchema'],
+        gdeltPath='/Users/jamesconkling/Documents/Projects/gdelt/export/',
+        initialize_table = True):
+    # batch import query to postgres from a directory of gdelt files
+
+    def unzip(source_filename, dest_dir):
+        with zipfile.ZipFile(source_filename) as zf:
+            for member in zf.infolist():
+                # Path traversal defense copied from
+                # http://hg.python.org/cpython/file/tip/Lib/http/server.py#l789
+                words = member.filename.split('/')
+                path = dest_dir
+                for word in words[:-1]:
+                    drive, word = os.path.splitdrive(word)
+                    head, word = os.path.split(word)
+                    if word in (os.curdir, os.pardir, ''): continue
+                    path = os.path.join(path, word)
+                zf.extract(member, path)
+
+    t1 = datetime.datetime.now()
+    dates = gdelt_datelist(startdate, enddate)
+    files_length = len(dates)
+    file_num = 1
+
+    if initialize_table:
+        init_table(table, table_schema)
+
+
+    for date in dates:
+        print "\t unzipping gdelt %s (%s / %s)" %(date, file_num, files_length)
+        try:
+            unzip(gdeltPath + date + '.zip', gdeltPath)
+        except IOError, e:
+            print "\t\t******** ERROR unzipping file ", date, " : ", e, " ********"
+            continue
+
+        if int(date) > 201304:
+            fileName = date + '.export.CSV'
+        else:
+            fileName = date + '.csv'
+
+
+        #load csv into database via psycopg2; see http://zetcode.com/db/postgresqlpythontutorial/
+        connection = None
+
+        try:
+            print "\t connecting to postgres"
+            connection = psycopg2.connect(database = database, user = user)
+            cursor = connection.cursor()
+
+            print "\t\t copying %s.csv into gdelt_temp" %fileName
+            cursor.execute("CREATE TABLE gdelt_temp" + table_schema)
+            cursor.execute("COPY gdelt_temp FROM '" + gdeltPath + fileName + "' WITH NULL ''")
+
+            print "\t\t inserting into %s query %s" %(table, query)
+            cursor.execute("INSERT INTO " + table + " " + query)
+            cursor.execute("DROP TABLE gdelt_temp")
+
+            connection.commit()
+            print "\t\t commit successful - inserted %s into %s" %(date, table)
+            file_num = file_num + 1
+
+        except psycopg2.DatabaseError, e:
+            if connection:
+                connection.rollback()
+
+            print '\t\t commit failed - error %s \n' % e
+            os.remove(gdeltPath + fileName)
+            sys.exit(1)
+
+        finally:
+            if connection:
+                connection.close()
+                print "\t connection closed \n"
+
+
+        #delete .csv file in directory
+        os.remove(gdeltPath + fileName)
+        #delete .zip file in directory
+        #os.remove(gdeltPath + date + '.zip')
+
+    dt = datetime.datetime.now() - t1
+    print "FINISHED LOADING FILES INTO POSTGRES.  Total time elapsed: %s minutes" %(dt.seconds / 60)
+
+
 def binned_density_map(
-        point_table, grid_table, date_range, database='gdelt',
+        point_table, grid_table, startdate, enddate, t_interval = 'WEEKLY', database='gdelt',
         user='jamesconkling', create_pntcnt_table=True):
-    s_date = datetime.datetime(int(date_range[0][:4]), int(date_range[0][5:7]), int(date_range[0][8:10]))
-    e_date = datetime.datetime(int(date_range[1][:4]), int(date_range[1][5:7]), int(date_range[1][8:10]))
-    dates = rrule.rrule(rrule.MONTHLY, dtstart=s_date, until=e_date)
+    if t_interval == 'DAILY':
+        dates = rrule.rrule(rrule.DAILY, dtstart=startdate, until=enddate)
+        pg_t_interval = 'DAY'
+    elif t_interval == 'WEEKLY':
+        dates = rrule.rrule(rrule.WEEKLY, dtstart=startdate, until=enddate)
+        pg_t_interval = 'WEEK'
+    elif t_interval == 'MONTHLY':
+        dates = rrule.rrule(rrule.MONTHLY, dtstart=startdate, until=enddate)
+        pg_t_interval = 'MONTH'
+    elif t_interval == 'YEARLY':
+        dates = rrule.rrule(rrule.YEARLY, dtstart=startdate, until=enddate)
+        pg_t_interval = 'YEAR'
+    else:
+        print "t_interval must be DAILY, WEEKLY, MONTHLY, or YEARLY"
+        sys.exit(1)
 
     t1 = datetime.datetime.now()
 
@@ -348,7 +521,7 @@ def binned_density_map(
     #   shp2pgsql -s 4326 -g geom -I <file.shp> public.<grid_table> | psql -d <database>
     #I do not know how much error this introduces
 
-    ##the code below uses parameterized queries, which allow for sql injection and are VERY dangerous
+    ##the code below uses parameterized queries, which allow for sql injection and are dangerous
     #if another user is allowed to set the parameters.  So long as this is only run locally, sql injection
     #shouldn't be an issue
     if create_pntcnt_table:
@@ -404,8 +577,8 @@ def binned_density_map(
     date_num = 1
 
     for date in dates:
-        date_col = "d" + str(date.year)[2:] + "_" + '{0:02d}'.format(date.month)
-        date_query = str(date.year) + "-" + '{0:02d}'.format(date.month) + "-01"
+        date_col = "d" + str(date.year)[2:] + "_" + '{0:02d}'.format(date.month) + '_' + '{0:02d}'.format(date.day)
+        date_query = str(date.year) + "-" + '{0:02d}'.format(date.month) + '-' + '{0:02d}'.format(date.day)
 
         connection = None
         try:
@@ -420,14 +593,15 @@ def binned_density_map(
 
             print "\t create pntcnt_tmp to store point in polygon count"
             cursor.execute("""CREATE TABLE pntcnt_tmp AS
-                            SELECT %(grid_table)s.gid, count(greatlakes_timequery.geo)::int
+                            SELECT %(grid_table)s.gid, count(timequery.geo)::int
                             FROM %(grid_table)s LEFT JOIN
                                 (SELECT geo FROM %(point_table)s
-                                 WHERE date_trunc('month', sqldate) = '%(date_query)s'
-                                ) AS greatlakes_timequery
-                            ON ST_Contains( %(grid_table)s.geom, greatlakes_timequery.geo::geometry)
+                                 WHERE date_trunc('%(pg_t_interval)s', sqldate) = date_trunc('%(pg_t_interval)s', DATE '%(date_query)s')
+                                ) AS timequery
+                            ON ST_Contains( %(grid_table)s.geom, timequery.geo::geometry)
                             GROUP BY %(grid_table)s.gid""" %{
-                            'grid_table': grid_table, 'point_table': point_table })
+                            'grid_table': grid_table, 'point_table': point_table,
+                            'date_query': date_query, 'pg_t_interval': pg_t_interval })
 
             print "\t join pntcnt_tmp to %s_pntcnt" %(point_table)
             cursor.execute("""UPDATE %(point_table)s_pntcnt
